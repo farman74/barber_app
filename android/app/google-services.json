@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "831100284886",
+    "project_id": "hairaiapp-2e6ce",
+    "storage_bucket": "hairaiapp-2e6ce.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:831100284886:android:8295e580cc3ab475ce3e77",
+        "android_client_info": {
+          "package_name": "com.example.barber_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "831100284886-t7m2aevoo6pbaer9rgs2h7lv08od9mr9.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDtgEKByq6tbPGYWzLJ6GC1V4HQTeEpHmo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "831100284886-t7m2aevoo6pbaer9rgs2h7lv08od9mr9.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
