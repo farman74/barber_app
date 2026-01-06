@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import '../core/app_theme.dart';
 import 'result_screen.dart'; // Nous allons créer ce fichier juste après
 import '../../services/n8n_service.dart';
-
+import '../../services/history_service.dart';
 class StyleSelectionScreen extends StatelessWidget {
   final String imagePath; // La photo de l'utilisateur
    final N8nService _n8nService = N8nService();
@@ -107,10 +107,9 @@ class StyleSelectionScreen extends StatelessWidget {
   }
 
   Future<void> _startGenerationProcess(BuildContext context, String styleName) async {
-    
     HapticFeedback.lightImpact();
 
-    // On affiche le loader
+    // Loader
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -122,21 +121,24 @@ class StyleSelectionScreen extends StatelessWidget {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw Exception("Utilisateur non connecté");
 
-      // --- APPEL AU WEBHOOK N8N ---
-      // C'est ici que la magie opère. L'app envoie la photo et attend que n8n
-      // ait fini tout le travail (Drive -> Gemini -> Réponse).
-      // Cela peut prendre 10 à 30 secondes.
-      
+      // 1. APPEL IA (n8n)
       String generatedUrl = await _n8nService.generateHairstyle(
         imagePath: imagePath,
         style: styleName,
         userId: user.uid,
       );
 
-      // --- SUCCÈS ---
+      // 2. SAUVEGARDE AUTOMATIQUE (Nouveau !)
+      // On le fait en "arrière-plan" sans attendre (await) pour ne pas ralentir l'affichage
+      HistoryService().saveGeneration(
+        userId: user.uid,
+        styleName: styleName,
+        imageData: generatedUrl
+      );
 
+      // 3. NAVIGATION
       if (context.mounted) {
-        Navigator.pop(context); // Ferme le loader
+        Navigator.pop(context); // Ferme loader
         HapticFeedback.mediumImpact();
 
         Navigator.push(
@@ -145,7 +147,6 @@ class StyleSelectionScreen extends StatelessWidget {
             builder: (context) => ResultScreen(
               styleName: styleName,
               originalImageProvider: imagePath, 
-              // On utilise la VRAIE URL renvoyée par n8n (depuis Drive ou autre)
               generatedImageUrl: generatedUrl, 
             ),
           ),
@@ -154,13 +155,9 @@ class StyleSelectionScreen extends StatelessWidget {
 
     } catch (e) {
       if (context.mounted) {
-        Navigator.pop(context); // Ferme le loader en cas d'erreur
+        Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Erreur IA : ${e.toString()}"), 
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 5), // On laisse le temps de lire
-          )
+          SnackBar(content: Text("Erreur : $e"), backgroundColor: Colors.red)
         );
       }
     }

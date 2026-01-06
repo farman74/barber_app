@@ -1,7 +1,6 @@
 import 'dart:io'; // Nécessaire pour gérer les fichiers locaux
 import 'package:barber_app/screens/style_selection_screen.dart';
 import 'package:flutter/material.dart';
-import '../core/app_theme.dart';
 
 class ImageValidationScreen extends StatelessWidget {
   final String imagePath; // Le chemin de la photo prise

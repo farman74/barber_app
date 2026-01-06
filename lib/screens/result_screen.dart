@@ -1,13 +1,19 @@
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:image_gallery_saver_plus/image_gallery_saver_plus.dart';
+
+import 'package:permission_handler/permission_handler.dart';
 import '../core/app_theme.dart';
 
 class ResultScreen extends StatefulWidget {
-  final String originalImageProvider; // Peut être un chemin de fichier OU une URL
-  final String generatedImageUrl;     // L'image résultat (URL)
+  final String originalImageProvider; 
+  final String generatedImageUrl;     
   final String styleName;
   final String? heroTag; 
-
 
   const ResultScreen({
     super.key, 
@@ -23,19 +29,87 @@ class ResultScreen extends StatefulWidget {
 
 class _ResultScreenState extends State<ResultScreen> {
   double _sliderValue = 0.5;
-  bool _showTutorial = true; // Pour afficher/cacher le tuto
+  bool _showTutorial = true;
+  bool _isSaving = false; // Pour afficher un chargement pendant la sauvegarde
 
   @override
   void initState() {
     super.initState();
-    // Cache le tutoriel automatiquement après 3 secondes
     Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) {
-        setState(() {
-          _showTutorial = false;
-        });
-      }
+      if (mounted) setState(() => _showTutorial = false);
     });
+  }
+
+  // --- 1. FONCTION DE PARTAGE ---
+  Future<void> _shareImage() async {
+    try {
+      // Convertir le Base64 en fichier temporaire
+      final bytes = _decodeBase64(widget.generatedImageUrl);
+      if (bytes == null) return;
+
+      final tempDir = await getTemporaryDirectory();
+      final file = await File('${tempDir.path}/barber_ai_share.png').create();
+      await file.writeAsBytes(bytes);
+
+      // Partager le fichier
+      await Share.shareXFiles(
+        [XFile(file.path)], 
+        text: 'Regarde mon nouveau style avec AI Barber ! 💈🔥'
+      );
+    } catch (e) {
+      print("Erreur partage: $e");
+    }
+  }
+
+  // --- 2. FONCTION DE SAUVEGARDE ---
+  Future<void> _saveToGallery() async {
+    setState(() => _isSaving = true);
+    try {
+      // Demander la permission (Android < 13 surtout)
+      if (Platform.isAndroid) {
+        await Permission.storage.request();
+      }
+
+      final bytes = _decodeBase64(widget.generatedImageUrl);
+      if (bytes == null) throw Exception("Image invalide");
+
+      final result = await ImageGallerySaverPlus.saveImage(
+        bytes,
+        quality: 100,
+        name: "BarberAI_${DateTime.now().millisecondsSinceEpoch}"
+      );
+
+      bool isSuccess = result['isSuccess'] ?? false;
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(isSuccess ? '✅ Photo enregistrée dans la galerie !' : '❌ Erreur de sauvegarde'),
+            backgroundColor: isSuccess ? Colors.green : Colors.red,
+          )
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+           const SnackBar(content: Text('❌ Erreur technique'), backgroundColor: Colors.red)
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  // Helper pour décoder proprement
+  Uint8List? _decodeBase64(String data) {
+    try {
+      if (data.startsWith('http')) return null; // Cas URL non géré ici pour le share rapide (à améliorer si besoin)
+      String clean = data.contains(',') ? data.split(',').last : data;
+      clean = clean.replaceAll(RegExp(r'\s+'), '');
+      return base64Decode(clean);
+    } catch (e) {
+      return null;
+    }
   }
 
   @override
@@ -44,16 +118,20 @@ class _ResultScreenState extends State<ResultScreen> {
       backgroundColor: Colors.black,
       appBar: AppBar(
         title: Text(widget.styleName),
+        backgroundColor: Colors.transparent,
         actions: [
-          IconButton(icon: const Icon(Icons.share), onPressed: () {}),
+          // Bouton Partager dans la barre du haut
+          IconButton(
+            icon: const Icon(Icons.share), 
+            onPressed: _shareImage
+          ),
         ],
       ),
       body: Column(
         children: [
           Expanded(
-            child: InteractiveViewer( // Le ZOOM est ici
-              minScale: 1.0,
-              maxScale: 4.0,
+            child: InteractiveViewer(
+              minScale: 1.0, maxScale: 4.0,
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   final width = constraints.maxWidth;
@@ -68,97 +146,22 @@ class _ResultScreenState extends State<ResultScreen> {
                     },
                     child: Stack(
                       children: [
-                        // 1. IMAGE APRÈS (Dessous)
-                        SizedBox(
-                          width: width, height: height,
-                          child: widget.heroTag != null 
-                              ? Hero(tag: widget.heroTag!, child: _buildImage(widget.generatedImageUrl))
-                              : _buildImage(widget.generatedImageUrl),
-                        ),
-
-                        // 2. IMAGE AVANT (Dessus, coupée)
+                        SizedBox(width: width, height: height, child: _buildResultImage(widget.generatedImageUrl)),
                         ClipRect(
                           clipper: _SliderClipper(_sliderValue),
-                          child: SizedBox(
-                            width: width, height: height,
-                            child: _buildImage(widget.originalImageProvider),
-                          ),
+                          child: SizedBox(width: width, height: height, child: Image.file(File(widget.originalImageProvider), fit: BoxFit.cover)),
                         ),
-
-                        // 3. LA BARRE DU SLIDER
                         Positioned(
-                          left: width * _sliderValue - 1.5,
-                          top: 0, bottom: 0,
-                          child: Container(
-                            width: 3, color: Colors.white,
-                            child: Center(
-                              child: Container(
-                                width: 30, height: 30,
-                                decoration: const BoxDecoration(
-                                  color: Colors.white,
-                                  shape: BoxShape.circle,
-                                  boxShadow: [BoxShadow(blurRadius: 10, color: Colors.black45)]
-                                ),
-                                child: const Icon(Icons.compare_arrows, size: 20, color: AppTheme.primaryPurple),
-                              ),
-                            ),
-                          ),
+                          left: width * _sliderValue - 1.5, top: 0, bottom: 0,
+                          child: Container(width: 3, color: Colors.white),
                         ),
-                      
-                      // 5. TUTORIEL OVERLAY (COUCHE D'AIDE)
-                        IgnorePointer( // Permet de cliquer à travers le tuto
-                          child: AnimatedOpacity(
-                            duration: const Duration(milliseconds: 500),
-                            opacity: _showTutorial ? 1.0 : 0.0,
-                            child: Container(
-                              color: Colors.black.withOpacity(0.4), // Fond sombre léger
-                              child: Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    // Icône de glissement
-                                    const Icon(Icons.touch_app, color: Colors.white, size: 50),
-                                    const SizedBox(height: 10),
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: const [
-                                        Icon(Icons.arrow_back, color: Colors.white),
-                                        SizedBox(width: 10),
-                                        Text(
-                                          "GLISSEZ POUR COMPARER",
-                                          style: TextStyle(
-                                            color: Colors.white, 
-                                            fontWeight: FontWeight.bold,
-                                            letterSpacing: 2
-                                          ),
-                                        ),
-                                        SizedBox(width: 10),
-                                        Icon(Icons.arrow_forward, color: Colors.white),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 30),
-                                    // Icône de Zoom
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: const [
-                                        Icon(Icons.zoom_in, color: AppTheme.primaryPurple),
-                                        SizedBox(width: 10),
-                                        Text(
-                                          "PINCEZ POUR ZOOMER",
-                                          style: TextStyle(color: AppTheme.primaryPurple, fontSize: 12),
-                                        ),
-                                      ],
-                                    )
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      
+                        // Indicateur de chargement si sauvegarde en cours
+                        if (_isSaving)
+                          Container(
+                            color: Colors.black54,
+                            child: const Center(child: CircularProgressIndicator(color: AppTheme.primaryPurple)),
+                          )
                       ],
-
-                      
                     ),
                   );
                 },
@@ -166,21 +169,45 @@ class _ResultScreenState extends State<ResultScreen> {
             ),
           ),
           
-          // Boutons du bas (cachés si on vient de la galerie pour simplifier, ou gardés)
-          const SizedBox(height: 20),
+          // BARRE D'ACTIONS DU BAS
+          Container(
+            padding: const EdgeInsets.all(20),
+            color: AppTheme.cardDark,
+            child: Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _saveToGallery,
+                    icon: const Icon(Icons.download),
+                    label: const Text("Enregistrer"),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          )
         ],
       ),
     );
   }
 
-  // Fonction intelligente pour afficher l'image selon si c'est une URL ou un Fichier
-  Widget _buildImage(String path) {
-    if (path.startsWith('http')) {
-      // C'est une URL (Galerie)
-      return Image.network(path, fit: BoxFit.contain);
+  Widget _buildResultImage(String data) {
+    if (data.startsWith('http')) {
+      return Image.network(data, fit: BoxFit.cover);
+    } else if (data.length > 100) { 
+      try {
+        String cleanBase64 = data.contains(',') ? data.split(',').last : data;
+        cleanBase64 = cleanBase64.replaceAll(RegExp(r'\s+'), '');
+        return Image.memory(base64Decode(cleanBase64), fit: BoxFit.cover);
+      } catch (e) {
+        return const Center(child: Text("Erreur image", style: TextStyle(color: Colors.red)));
+      }
     } else {
-      // C'est un fichier local (Caméra)
-      return Image.file(File(path), fit: BoxFit.contain);
+      return const Center(child: CircularProgressIndicator());
     }
   }
 }

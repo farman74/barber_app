@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core/app_theme.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -9,47 +10,48 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // Variable pour savoir quel filtre est sélectionné (0 = Tout, 1 = Dégradés, etc.)
   int _selectedFilterIndex = 0;
-
-  // Liste des filtres pour la barre de navigation horizontale
   final List<String> _filters = ["Tout", "Dégradés", "Afro", "Tresses", "Locks", "Court"];
+
+  // Récupération de l'utilisateur connecté
+  final User? user = FirebaseAuth.instance.currentUser;
 
   @override
   Widget build(BuildContext context) {
-    // Scaffold est la structure de base d'une page
+    // On récupère le nom ou l'email (si pas de nom)
+    String displayName = user?.displayName ?? "Utilisateur";
+    if (displayName.isEmpty && user?.email != null) {
+      displayName = user!.email!.split('@')[0]; // Prend la partie avant @
+    }
+
     return Scaffold(
-      // SafeArea permet d'éviter que le contenu soit caché par l'encoche (notch) du téléphone
       body: SafeArea(
-        child: SingleChildScrollView( // Permet de scroller si l'écran est petit
-          padding: const EdgeInsets.all(20), // Marge de 20px tout autour
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               
-              // -----------------------------------------------------------
-              // 1. LE HEADER (Bienvenue + Crédits)
-              // -----------------------------------------------------------
+              // 1. HEADER (VRAIES INFOS)
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween, // Espace max entre les deux éléments
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // Partie Gauche : Textes
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
+                      const Text(
                         "BIENVENUE", 
                         style: TextStyle(
                           color: AppTheme.textGrey, 
                           fontSize: 12, 
-                          letterSpacing: 1.5, // Espacement des lettres pour le style "Luxe"
+                          letterSpacing: 1.5,
                           fontWeight: FontWeight.w600
                         )
                       ),
                       const SizedBox(height: 5),
-                      const Text(
-                        "Jean Dupont", 
-                        style: TextStyle(
+                      Text(
+                        displayName, // ✅ VRAI NOM
+                        style: const TextStyle(
                           color: Colors.white, 
                           fontSize: 24, 
                           fontWeight: FontWeight.bold
@@ -58,28 +60,21 @@ class _HomeScreenState extends State<HomeScreen> {
                     ],
                   ),
 
-                  // Partie Droite : Badge Crédits
+                  // Badge PRO (Placeholder pour le futur abonnement)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
-                      color: AppTheme.cardLight, // Fond gris léger
-                      borderRadius: BorderRadius.circular(20), // Bords très arrondis
-                      border: Border.all(color: Colors.white10), // Fine bordure subtile
+                      color: AppTheme.cardLight,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.white10),
                     ),
-                    child: Row(
-                      children: [
-                        // Petit point violet qui brille
-                        const Icon(Icons.circle, size: 10, color: AppTheme.primaryPurple),
-                        const SizedBox(width: 8),
-                        const Text(
-                          "5 Crédits", 
-                          style: TextStyle(
-                            color: Colors.white, 
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12
-                          )
-                        ),
-                      ],
+                    child: const Text(
+                      "FREE", // On changera ça en "PRO" plus tard
+                      style: TextStyle(
+                        color: Colors.grey, 
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12
+                      )
                     ),
                   )
                 ],
